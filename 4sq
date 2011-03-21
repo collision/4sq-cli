@@ -1,0 +1,63 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'foursquare'
+require 'simplegeo'
+require 'restclient'
+
+meth = ARGV[0].strip if ARGV[0]
+raise "Currently only checking in is supported. Usage: $ 4sq checkin [venue-id] [shout]" unless meth && meth == 'checkin'
+vid = ARGV[1].to_i
+#raise "Usage: $ 4sq checkin venue-id [shout]" unless vid > 0
+
+oauth_key = FOURSQUARE_KEY
+oauth_secret = FOURSQUARE_SECRET
+
+access_token = ACCESS_TOKEN
+access_secret = ACCESS_SECRET
+
+oauth = Foursquare::OAuth.new(oauth_key, oauth_secret)
+oauth.authorize_from_access(access_token, access_secret)
+$foursquare = Foursquare::Base.new(oauth)
+
+sg_key = SIMPLEGEO_KEY
+sg_secret = SIMPLEGEO_SECRET
+SimpleGeo::Client.set_credentials(sg_key, sg_secret)
+# ip = RestClient.get('collison.ie/ip')
+# locdata = SimpleGeo::Client.get_places_by_ip(ip)
+# lon, lat = locdata[:features].first[:geometry][:coordinates]
+
+def checkin(vid)
+  v = $foursquare.venue :vid => vid
+
+  checkin = {
+    :vid => vid,
+    :shout => ARGV[2],
+    :twitter => 0,
+    :geolat => v['geolat'],
+    :geolong => v['geolong']
+  }
+
+  nc = $foursquare.checkin(checkin)
+  puts "Checked into #{v['name']}\nhttp://foursquare.com/venue/#{vid}"
+end
+
+if vid > 0
+  checkin(vid)
+else
+  print "Rough address: "
+  lon, lat = SimpleGeo::Client.get_places_by_address(STDIN.gets.chomp)[:features].first[:geometry][:coordinates]
+  print "Name of venue: "
+  query = {:geolat => lat, :geolong => lon, :limit => 10}
+  query[:q] = STDIN.gets.chomp
+  resp = $foursquare.venues query
+  venues = resp['groups'][0]['venues']
+  venues.each do |v|
+    puts "(#{venues.index(v)+1}) #{v['name']}, #{v['address']}, #{v['city']}"
+  end
+  index = 0
+  while index == 0 || index > venues.length + 1
+    print "Select a venue: "
+    index = STDIN.gets.chomp.to_i
+  end
+  checkin(venues[index-1]['id'])
+end
